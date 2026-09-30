@@ -1,34 +1,41 @@
-
-name: Preview AssetFlux Android
+name: Build Preview AssetFlux APK
 
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - main
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-  build-unity:
+  build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Build Unity Android
-        uses: game-ci/unity-builder@v4
-        env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
-          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
-          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
         with:
-          targetPlatform: Android
-          androidExportType: androidStudioProject
-          allowDirtyBuild: true
+          distribution: temurin
+          java-version: '17'
 
-      - name: Upload Android project
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build debug APK
+        run: gradle assembleDebug
+
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Preview-Android-Project
-          path: build/Android
+          name: Preview-AssetFlux-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
