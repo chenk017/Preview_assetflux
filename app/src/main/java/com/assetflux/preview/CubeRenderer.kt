@@ -1,7 +1,7 @@
 package com.assetflux.preview
 
 
-package com.assetflux.preview
+
 
 import android.graphics.Bitmap
 import android.graphics.Color
