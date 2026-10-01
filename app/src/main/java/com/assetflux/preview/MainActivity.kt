@@ -47,6 +47,14 @@ class MainActivity : Activity() {
             setPadding(12, 14, 12, 14)
         }
 
+        addControlRow(
+            root,
+            listOf(
+                "Kubus" to { renderer.setDefaultMesh() },
+                "Piramida" to { renderer.setMesh(MeshFactory.pyramid()) }
+            )
+        )
+
         val chooseButton = Button(this).apply {
             text = "Pilih Texture2D (PNG)"
             isAllCaps = false

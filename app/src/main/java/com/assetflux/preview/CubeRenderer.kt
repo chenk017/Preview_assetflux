@@ -142,6 +142,14 @@ class CubeRenderer : GLSurfaceView.Renderer {
         pendingMesh = mesh
     }
 
+    /**
+     * Mengembalikan geometri kubus bawaan.
+     * Buffer OpenGL diperbarui pada frame berikutnya.
+     */
+    fun setDefaultMesh() {
+        pendingMesh = defaultMeshData
+    }
+
     @Synchronized
     fun adjustTransform(
         positionXDelta: Float = 0f,
