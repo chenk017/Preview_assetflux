@@ -38,6 +38,7 @@ class CubeRenderer : GLSurfaceView.Renderer {
     private val vpModel = FloatArray(16)
 
     private var angle = 0f
+    private val transform = TransformData()
 
     private val vertexShader = """
         uniform mat4 uMVP;
@@ -224,8 +225,33 @@ class CubeRenderer : GLSurfaceView.Renderer {
         textureOffset = (textureOffset + 0.0015f) % 1f
 
         Matrix.setIdentityM(model, 0)
-        Matrix.rotateM(model, 0, angle, 0f, 1f, 0f)
-        Matrix.rotateM(model, 0, 18f, 1f, 0f, 0f)
+        Matrix.translateM(
+            model, 0,
+            transform.positionX,
+            transform.positionY,
+            transform.positionZ
+        )
+        Matrix.rotateM(
+            model, 0,
+            angle + transform.rotationY,
+            0f, 1f, 0f
+        )
+        Matrix.rotateM(
+            model, 0,
+            transform.rotationX,
+            1f, 0f, 0f
+        )
+        Matrix.rotateM(
+            model, 0,
+            transform.rotationZ,
+            0f, 0f, 1f
+        )
+        Matrix.scaleM(
+            model, 0,
+            transform.scaleX,
+            transform.scaleY,
+            transform.scaleZ
+        )
 
         Matrix.multiplyMM(
             vpModel, 0, view, 0, model, 0
