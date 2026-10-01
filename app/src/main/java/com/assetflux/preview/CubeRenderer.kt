@@ -127,6 +127,49 @@ class CubeRenderer : GLSurfaceView.Renderer {
         pendingBitmap = bitmap
     }
 
+    @Synchronized
+    fun adjustTransform(
+        positionXDelta: Float = 0f,
+        positionYDelta: Float = 0f,
+        rotationXDelta: Float = 0f,
+        rotationZDelta: Float = 0f,
+        scaleFactor: Float = 1f
+    ) {
+        require(scaleFactor.isFinite() && scaleFactor > 0f) {
+            "Faktor skala harus berupa angka positif."
+        }
+
+        transform.positionX += positionXDelta
+        transform.positionY += positionYDelta
+        transform.rotationX += rotationXDelta
+        transform.rotationZ += rotationZDelta
+
+        val nextScale = (transform.scaleX * scaleFactor)
+            .coerceIn(0.25f, 2.5f)
+
+        transform.scaleX = nextScale
+        transform.scaleY = nextScale
+        transform.scaleZ = nextScale
+    }
+
+    @Synchronized
+    fun resetTransform() {
+        transform.positionX = 0f
+        transform.positionY = 0f
+        transform.positionZ = 0f
+        transform.rotationX = 18f
+        transform.rotationY = 0f
+        transform.rotationZ = 0f
+        transform.scaleX = 1f
+        transform.scaleY = 1f
+        transform.scaleZ = 1f
+    }
+
+    @Synchronized
+    private fun getTransformSnapshot(): TransformData {
+        return transform.copy()
+    }
+
     override fun onSurfaceCreated(
         gl: GL10?,
         config: EGLConfig?
@@ -224,33 +267,35 @@ class CubeRenderer : GLSurfaceView.Renderer {
         angle += 0.7f
         textureOffset = (textureOffset + 0.0015f) % 1f
 
+        val currentTransform = getTransformSnapshot()
+
         Matrix.setIdentityM(model, 0)
         Matrix.translateM(
             model, 0,
-            transform.positionX,
-            transform.positionY,
-            transform.positionZ
+            currentTransform.positionX,
+            currentTransform.positionY,
+            currentTransform.positionZ
         )
         Matrix.rotateM(
             model, 0,
-            angle + transform.rotationY,
+            angle + currentTransform.rotationY,
             0f, 1f, 0f
         )
         Matrix.rotateM(
             model, 0,
-            transform.rotationX,
+            currentTransform.rotationX,
             1f, 0f, 0f
         )
         Matrix.rotateM(
             model, 0,
-            transform.rotationZ,
+            currentTransform.rotationZ,
             0f, 0f, 1f
         )
         Matrix.scaleM(
             model, 0,
-            transform.scaleX,
-            transform.scaleY,
-            transform.scaleZ
+            currentTransform.scaleX,
+            currentTransform.scaleY,
+            currentTransform.scaleZ
         )
 
         Matrix.multiplyMM(

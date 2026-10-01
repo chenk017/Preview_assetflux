@@ -72,6 +72,35 @@ class MainActivity : Activity() {
             )
         )
 
+        addControlRow(
+            root,
+            listOf(
+                "←" to { renderer.adjustTransform(positionXDelta = -0.15f) },
+                "→" to { renderer.adjustTransform(positionXDelta = 0.15f) },
+                "↑" to { renderer.adjustTransform(positionYDelta = 0.15f) },
+                "↓" to { renderer.adjustTransform(positionYDelta = -0.15f) }
+            )
+        )
+
+        addControlRow(
+            root,
+            listOf(
+                "X−" to { renderer.adjustTransform(rotationXDelta = -10f) },
+                "X+" to { renderer.adjustTransform(rotationXDelta = 10f) },
+                "Z−" to { renderer.adjustTransform(rotationZDelta = -10f) },
+                "Z+" to { renderer.adjustTransform(rotationZDelta = 10f) }
+            )
+        )
+
+        addControlRow(
+            root,
+            listOf(
+                "Perkecil" to { renderer.adjustTransform(scaleFactor = 0.9f) },
+                "Perbesar" to { renderer.adjustTransform(scaleFactor = 1.1f) },
+                "Reset" to { renderer.resetTransform() }
+            )
+        )
+
         root.addView(
             chooseButton,
             LinearLayout.LayoutParams(
@@ -81,6 +110,47 @@ class MainActivity : Activity() {
         )
 
         setContentView(root)
+    }
+
+    private fun addControlRow(
+        root: LinearLayout,
+        controls: List<Pair<String, () -> Unit>>
+    ) {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+
+        controls.forEach { (label, action) ->
+            row.addView(
+                controlButton(label, action),
+                LinearLayout.LayoutParams(
+                    0,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    1f
+                )
+            )
+        }
+
+        root.addView(
+            row,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+    }
+
+    private fun controlButton(
+        label: String,
+        action: () -> Unit
+    ): Button {
+        return Button(this).apply {
+            text = label
+            isAllCaps = false
+            textSize = 12f
+            setPadding(2, 0, 2, 0)
+            setOnClickListener { action() }
+        }
     }
 
     private fun openTexturePicker() {
