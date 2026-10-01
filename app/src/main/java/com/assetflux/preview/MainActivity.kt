@@ -22,6 +22,7 @@ class MainActivity : Activity() {
 
     companion object {
         private const val REQUEST_TEXTURE = 1001
+        private const val REQUEST_MODEL_OBJ = 1002
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -54,6 +55,14 @@ class MainActivity : Activity() {
                 "Piramida" to { renderer.setMesh(MeshFactory.pyramid()) }
             )
         )
+
+        val chooseModelButton = Button(this).apply {
+            text = "Pilih Model 3D (OBJ)"
+            isAllCaps = false
+            setOnClickListener {
+                openObjPicker()
+            }
+        }
 
         val chooseButton = Button(this).apply {
             text = "Pilih Texture2D (PNG)"
@@ -106,6 +115,14 @@ class MainActivity : Activity() {
                 "Perkecil" to { renderer.adjustTransform(scaleFactor = 0.9f) },
                 "Perbesar" to { renderer.adjustTransform(scaleFactor = 1.1f) },
                 "Reset" to { renderer.resetTransform() }
+            )
+        )
+
+        root.addView(
+            chooseModelButton,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
             )
         )
 
@@ -171,6 +188,16 @@ class MainActivity : Activity() {
         startActivityForResult(intent, REQUEST_TEXTURE)
     }
 
+    private fun openObjPicker() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+        }
+
+        @Suppress("DEPRECATION")
+        startActivityForResult(intent, REQUEST_MODEL_OBJ)
+    }
+
     @Deprecated("Using onActivityResult for compatibility")
     override fun onActivityResult(
         requestCode: Int,
@@ -179,13 +206,34 @@ class MainActivity : Activity() {
     ) {
         super.onActivityResult(requestCode, resultCode, data)
 
-        if (requestCode != REQUEST_TEXTURE ||
-            resultCode != RESULT_OK
-        ) {
+        if (resultCode != RESULT_OK) return
+
+        val uri: Uri = data?.data ?: return
+
+        if (requestCode == REQUEST_MODEL_OBJ) {
+            try {
+                val mesh = contentResolver.openInputStream(uri)?.use {
+                    ObjMeshParser.parse(it)
+                } ?: throw IllegalArgumentException("File OBJ tidak dapat dibuka.")
+
+                renderer.setMesh(mesh)
+
+                Toast.makeText(
+                    this,
+                    "Model OBJ dimuat: ${mesh.vertexCount} vertex, ${mesh.triangleCount} segitiga",
+                    Toast.LENGTH_LONG
+                ).show()
+            } catch (e: Exception) {
+                Toast.makeText(
+                    this,
+                    "Gagal membuka OBJ: ${e.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
             return
         }
 
-        val uri: Uri = data?.data ?: return
+        if (requestCode != REQUEST_TEXTURE) return
 
         try {
             val bitmap = contentResolver.openInputStream(uri)?.use {
