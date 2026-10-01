@@ -118,6 +118,10 @@ class CubeRenderer : GLSurfaceView.Renderer {
         20,21,22, 20,22,23
     )
 
+    private val meshData by lazy {
+        MeshData(vertices, indices)
+    }
+
     fun setBitmap(bitmap: Bitmap) {
         pendingBitmap = bitmap
     }
@@ -135,20 +139,24 @@ class CubeRenderer : GLSurfaceView.Renderer {
                GLES20.GL_ONE_MINUS_SRC_ALPHA)
 
         val vertexData = ByteBuffer
-            .allocateDirect(vertices.size * 4)
+            .allocateDirect(
+                meshData.vertices.size * MeshData.BYTES_PER_FLOAT
+            )
             .order(ByteOrder.nativeOrder())
             .asFloatBuffer()
 
-        vertexData.put(vertices)
+        vertexData.put(meshData.vertices)
         vertexData.position(0)
         vertexBuffer = vertexData
 
         val indexData = ByteBuffer
-            .allocateDirect(indices.size * 2)
+            .allocateDirect(
+                meshData.indices.size * MeshData.BYTES_PER_SHORT
+            )
             .order(ByteOrder.nativeOrder())
             .asShortBuffer()
 
-        indexData.put(indices)
+        indexData.put(meshData.indices)
         indexData.position(0)
         indexBuffer = indexData
 
@@ -243,28 +251,28 @@ class CubeRenderer : GLSurfaceView.Renderer {
         GLES20.glEnableVertexAttribArray(positionHandle)
         GLES20.glVertexAttribPointer(
             positionHandle,
-            3,
+            MeshData.POSITION_COMPONENTS,
             GLES20.GL_FLOAT,
             false,
-            5 * 4,
+            MeshData.FLOATS_PER_VERTEX * MeshData.BYTES_PER_FLOAT,
             vertexBuffer
         )
 
-        vertexBuffer.position(3)
+        vertexBuffer.position(MeshData.POSITION_COMPONENTS)
         GLES20.glEnableVertexAttribArray(uvHandle)
         GLES20.glVertexAttribPointer(
             uvHandle,
-            2,
+            MeshData.UV_COMPONENTS,
             GLES20.GL_FLOAT,
             false,
-            5 * 4,
+            MeshData.FLOATS_PER_VERTEX * MeshData.BYTES_PER_FLOAT,
             vertexBuffer
         )
 
         indexBuffer.position(0)
         GLES20.glDrawElements(
             GLES20.GL_TRIANGLES,
-            indices.size,
+            meshData.indices.size,
             GLES20.GL_UNSIGNED_SHORT,
             indexBuffer
         )
