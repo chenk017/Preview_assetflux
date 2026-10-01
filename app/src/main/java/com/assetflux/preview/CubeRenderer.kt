@@ -49,7 +49,7 @@ class CubeRenderer : GLSurfaceView.Renderer {
         }
     """.trimIndent()
 
-private val fragmentShader = """
+    private val fragmentShader = """
     precision mediump float;
     uniform sampler2D uTexture;
     varying vec2 vUV;
@@ -65,7 +65,6 @@ private val fragmentShader = """
         gl_FragColor = color;
     }
 """.trimIndent()
-    """.trimIndent()
 
     private val vertices = floatArrayOf(
         // Front
@@ -123,13 +122,12 @@ private val fragmentShader = """
         config: EGLConfig?
     ) {
         GLES20.glClearColor(0.08f, 0.09f, 0.13f, 1f)
-        GLES20.glEnable(GLES20.GL_DEPTH_TEST)
-
-	// Alpha transparency
-	GLES20.glEnable(GLES20.GL_BLEND)
-	GLES20.glBlendFunc(
-		GLES20.GL_SRC_ALPHA,
-		GLES20.GL_ONE_MINUS_SRC_ALPHA)
+        GLES20.glEnable(GLES20.GL_DEPTH_TEST) 
+        // Alpha transparency
+        GLES20.glEnable(GLES20.GL_BLEND)
+        GLES20.glBlendFunc(
+               GLES20.GL_SRC_ALPHA,
+               GLES20.GL_ONE_MINUS_SRC_ALPHA)
 
         val vertexData = ByteBuffer
             .allocateDirect(vertices.size * 4)
