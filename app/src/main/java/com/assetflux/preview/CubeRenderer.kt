@@ -31,6 +31,13 @@ class CubeRenderer : GLSurfaceView.Renderer {
     private lateinit var vertexBuffer: FloatBuffer
     private lateinit var indexBuffer: ShortBuffer
 
+    // Mesh yang menunggu untuk diterapkan pada thread OpenGL.
+    @Volatile
+    private var pendingMesh: MeshData? = null
+
+    // Mesh aktif hanya diperbarui pada thread OpenGL.
+    private var activeMeshData: MeshData? = null
+
     private val projection = FloatArray(16)
     private val view = FloatArray(16)
     private val model = FloatArray(16)
@@ -119,12 +126,20 @@ class CubeRenderer : GLSurfaceView.Renderer {
         20,21,22, 20,22,23
     )
 
-    private val meshData by lazy {
+    private val defaultMeshData by lazy {
         MeshData(vertices, indices)
     }
 
     fun setBitmap(bitmap: Bitmap) {
         pendingBitmap = bitmap
+    }
+
+    /**
+     * Meminta renderer mengganti geometri.
+     * Buffer OpenGL diperbarui pada frame berikutnya.
+     */
+    fun setMesh(mesh: MeshData) {
+        pendingMesh = mesh
     }
 
     @Synchronized
@@ -182,27 +197,9 @@ class CubeRenderer : GLSurfaceView.Renderer {
                GLES20.GL_SRC_ALPHA,
                GLES20.GL_ONE_MINUS_SRC_ALPHA)
 
-        val vertexData = ByteBuffer
-            .allocateDirect(
-                meshData.vertices.size * MeshData.BYTES_PER_FLOAT
-            )
-            .order(ByteOrder.nativeOrder())
-            .asFloatBuffer()
-
-        vertexData.put(meshData.vertices)
-        vertexData.position(0)
-        vertexBuffer = vertexData
-
-        val indexData = ByteBuffer
-            .allocateDirect(
-                meshData.indices.size * MeshData.BYTES_PER_SHORT
-            )
-            .order(ByteOrder.nativeOrder())
-            .asShortBuffer()
-
-        indexData.put(meshData.indices)
-        indexData.position(0)
-        indexBuffer = indexData
+        val initialMesh = pendingMesh ?: defaultMeshData
+        pendingMesh = null
+        uploadMesh(initialMesh)
 
         program = createProgram(vertexShader, fragmentShader)
 
@@ -260,6 +257,12 @@ class CubeRenderer : GLSurfaceView.Renderer {
         if (newBitmap != null) {
             pendingBitmap = null
             uploadTexture(newBitmap)
+        }
+
+        val newMesh = pendingMesh
+        if (newMesh != null) {
+            pendingMesh = null
+            uploadMesh(newMesh)
         }
 
         GLES20.glUseProgram(program)
@@ -343,13 +346,42 @@ class CubeRenderer : GLSurfaceView.Renderer {
         indexBuffer.position(0)
         GLES20.glDrawElements(
             GLES20.GL_TRIANGLES,
-            meshData.indices.size,
+            activeMeshData?.indices?.size ?: 0,
             GLES20.GL_UNSIGNED_SHORT,
             indexBuffer
         )
 
         GLES20.glDisableVertexAttribArray(positionHandle)
         GLES20.glDisableVertexAttribArray(uvHandle)
+    }
+
+    /**
+     * Membuat buffer mesh pada thread OpenGL.
+     */
+    private fun uploadMesh(mesh: MeshData) {
+        val vertexData = ByteBuffer
+            .allocateDirect(
+                mesh.vertices.size * MeshData.BYTES_PER_FLOAT
+            )
+            .order(ByteOrder.nativeOrder())
+            .asFloatBuffer()
+
+        vertexData.put(mesh.vertices)
+        vertexData.position(0)
+        vertexBuffer = vertexData
+
+        val indexData = ByteBuffer
+            .allocateDirect(
+                mesh.indices.size * MeshData.BYTES_PER_SHORT
+            )
+            .order(ByteOrder.nativeOrder())
+            .asShortBuffer()
+
+        indexData.put(mesh.indices)
+        indexData.position(0)
+        indexBuffer = indexData
+
+        activeMeshData = mesh
     }
 
     private fun uploadTexture(bitmap: Bitmap) {
