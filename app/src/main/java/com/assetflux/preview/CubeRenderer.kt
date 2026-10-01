@@ -49,14 +49,22 @@ class CubeRenderer : GLSurfaceView.Renderer {
         }
     """.trimIndent()
 
-    private val fragmentShader = """
-        precision mediump float;
-        uniform sampler2D uTexture;
-        varying vec2 vUV;
+private val fragmentShader = """
+    precision mediump float;
+    uniform sampler2D uTexture;
+    varying vec2 vUV;
 
-        void main() {
-            gl_FragColor = texture2D(uTexture, vUV);
+    void main() {
+        vec4 color = texture2D(uTexture, vUV);
+
+        // Buang piksel yang sepenuhnya transparan
+        if (color.a <= 0.01) {
+            discard;
         }
+
+        gl_FragColor = color;
+    }
+""".trimIndent()
     """.trimIndent()
 
     private val vertices = floatArrayOf(
@@ -116,6 +124,12 @@ class CubeRenderer : GLSurfaceView.Renderer {
     ) {
         GLES20.glClearColor(0.08f, 0.09f, 0.13f, 1f)
         GLES20.glEnable(GLES20.GL_DEPTH_TEST)
+
+	// Alpha transparency
+	GLES20.glEnable(GLES20.GL_BLEND)
+	GLES20.glBlendFunc(
+		GLES20.GL_SRC_ALPHA,
+		GLES20.GL_ONE_MINUS_SRC_ALPHA)
 
         val vertexData = ByteBuffer
             .allocateDirect(vertices.size * 4)
