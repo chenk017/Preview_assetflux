@@ -25,6 +25,8 @@ class CubeRenderer : GLSurfaceView.Renderer {
     private var uvHandle = 0
     private var mvpHandle = 0
     private var textureHandle = 0
+    private var uvOffsetHandle = 0
+    private var textureOffset = 0f
 
     private lateinit var vertexBuffer: FloatBuffer
     private lateinit var indexBuffer: ShortBuffer
@@ -52,10 +54,13 @@ class CubeRenderer : GLSurfaceView.Renderer {
     private val fragmentShader = """
     precision mediump float;
     uniform sampler2D uTexture;
+    uniform vec2 uUVOffset;
     varying vec2 vUV;
 
     void main() {
-        vec4 color = texture2D(uTexture, vUV);
+        vec4 color = texture2D(
+            uTexture, fract(vUV + uUVOffset)
+        );
 
         // Buang piksel yang sepenuhnya transparan
         if (color.a <= 0.01) {
@@ -161,6 +166,9 @@ class CubeRenderer : GLSurfaceView.Renderer {
         textureHandle = GLES20.glGetUniformLocation(
             program, "uTexture"
         )
+        uvOffsetHandle = GLES20.glGetUniformLocation(
+            program, "uUVOffset"
+        )
 
         Matrix.setLookAtM(
             view, 0,
@@ -205,6 +213,7 @@ class CubeRenderer : GLSurfaceView.Renderer {
         GLES20.glUseProgram(program)
 
         angle += 0.7f
+        textureOffset = (textureOffset + 0.0015f) % 1f
 
         Matrix.setIdentityM(model, 0)
         Matrix.rotateM(model, 0, angle, 0f, 1f, 0f)
@@ -226,6 +235,9 @@ class CubeRenderer : GLSurfaceView.Renderer {
             GLES20.GL_TEXTURE_2D, textureId
         )
         GLES20.glUniform1i(textureHandle, 0)
+        GLES20.glUniform2f(
+            uvOffsetHandle, textureOffset, 0f
+        )
 
         vertexBuffer.position(0)
         GLES20.glEnableVertexAttribArray(positionHandle)
