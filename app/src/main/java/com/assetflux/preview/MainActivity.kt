@@ -23,6 +23,7 @@ class MainActivity : Activity() {
     companion object {
         private const val REQUEST_TEXTURE = 1001
         private const val REQUEST_MODEL_OBJ = 1002
+        private const val REQUEST_UNITY_BUNDLE = 1003
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -69,6 +70,14 @@ class MainActivity : Activity() {
             isAllCaps = false
             setOnClickListener {
                 openTexturePicker()
+            }
+        }
+
+        val chooseUnityBundleButton = Button(this).apply {
+            text = "Periksa Unity Bundle (.unity3d)"
+            isAllCaps = false
+            setOnClickListener {
+                openUnityBundlePicker()
             }
         }
 
@@ -134,6 +143,14 @@ class MainActivity : Activity() {
             )
         )
 
+        root.addView(
+            chooseUnityBundleButton,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+
         setContentView(root)
     }
 
@@ -178,6 +195,16 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun openUnityBundlePicker() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+        }
+
+        @Suppress("DEPRECATION")
+        startActivityForResult(intent, REQUEST_UNITY_BUNDLE)
+    }
+
     private fun openTexturePicker() {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
@@ -209,6 +236,32 @@ class MainActivity : Activity() {
         if (resultCode != RESULT_OK) return
 
         val uri: Uri = data?.data ?: return
+
+        if (requestCode == REQUEST_UNITY_BUNDLE) {
+            try {
+                val header = contentResolver.openInputStream(uri)?.use {
+                    UnityBundleHeaderReader.read(it)
+                } ?: throw IllegalArgumentException(
+                    "File Unity Bundle tidak dapat dibuka."
+                )
+
+                Toast.makeText(
+                    this,
+                    "UnityFS valid\n" +
+                        "Format: ${header.formatVersion}\n" +
+                        "Unity: ${header.engineVersion}\n" +
+                        "Ukuran: ${header.bundleSize} byte",
+                    Toast.LENGTH_LONG
+                ).show()
+            } catch (e: Exception) {
+                Toast.makeText(
+                    this,
+                    "Gagal membaca Unity Bundle: ${e.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            return
+        }
 
         if (requestCode == REQUEST_MODEL_OBJ) {
             try {
