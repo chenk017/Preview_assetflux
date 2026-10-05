@@ -152,7 +152,7 @@ object UnityBundleDataReader {
             "Ukuran hasil LZMA terlalu besar: $uncompressedSize"
         }
 
-        val properties = compressed[0]
+        val properties = compressed[0].toInt() and 0xff
 
         val dictionarySize =
             (compressed[1].toLong() and 0xffL) or
@@ -160,8 +160,24 @@ object UnityBundleDataReader {
             ((compressed[3].toLong() and 0xffL) shl 16) or
             ((compressed[4].toLong() and 0xffL) shl 24)
 
+        val previewCount = minOf(compressed.size, 16)
+
+        val preview = compressed
+            .copyOfRange(0, previewCount)
+            .joinToString(" ") {
+                "%02x".format(it.toInt() and 0xff)
+            }
+
+        val diagnostic =
+            "LZMA diag: " +
+            "compressed=${compressed.size}, " +
+            "uncompressed=$uncompressedSize, " +
+            "properties=$properties, " +
+            "dict=$dictionarySize, " +
+            "head=$preview"
+
         require(dictionarySize <= Int.MAX_VALUE) {
-            "Dictionary LZMA terlalu besar: $dictionarySize"
+            "$diagnostic | Dictionary LZMA terlalu besar"
         }
 
         val rawLzma = ByteArrayInputStream(
@@ -174,36 +190,43 @@ object UnityBundleDataReader {
             uncompressedSize.toInt()
         )
 
-        LZMAInputStream(
-            rawLzma,
-            uncompressedSize,
-            properties,
-            dictionarySize.toInt()
-        ).use { lzma ->
-            var offset = 0
+        try {
+            LZMAInputStream(
+                rawLzma,
+                uncompressedSize,
+                properties.toByte(),
+                dictionarySize.toInt()
+            ).use { lzma ->
+                var offset = 0
 
-            while (offset < output.size) {
-                val count = lzma.read(
-                    output,
-                    offset,
-                    output.size - offset
-                )
+                while (offset < output.size) {
+                    val count = lzma.read(
+                        output,
+                        offset,
+                        output.size - offset
+                    )
 
-                if (count < 0) {
-                    break
+                    if (count < 0) {
+                        break
+                    }
+
+                    if (count == 0) {
+                        continue
+                    }
+
+                    offset += count
                 }
 
-                if (count == 0) {
-                    continue
+                require(offset == output.size) {
+                    "$diagnostic | Ukuran hasil LZMA tidak cocok: " +
+                        "$offset != ${output.size}"
                 }
-
-                offset += count
             }
-
-            require(offset == output.size) {
-                "Ukuran hasil LZMA tidak cocok: " +
-                    "$offset != ${output.size}"
-            }
+        } catch (e: Exception) {
+            throw IllegalArgumentException(
+                "$diagnostic | Decoder error: ${e.message}",
+                e
+            )
         }
 
         return output
