@@ -1,6 +1,8 @@
 package com.assetflux.preview
 
 import net.jpountz.lz4.LZ4Factory
+import org.tukaani.xz.LZMAInputStream
+import java.io.ByteArrayInputStream
 import java.io.DataInputStream
 import java.io.InputStream
 
@@ -73,6 +75,13 @@ object UnityBundleDataReader {
                     compressed
                 }
 
+                1 -> {
+                    decodeLzma(
+                        compressed,
+                        block.uncompressedSize
+                    )
+                }
+
                 2, 3 -> {
                     val output = ByteArray(
                         block.uncompressedSize.toInt()
@@ -129,5 +138,74 @@ object UnityBundleDataReader {
             totalUncompressedSize =
                 totalUncompressedSize
         )
+    }
+
+    private fun decodeLzma(
+        compressed: ByteArray,
+        uncompressedSize: Long
+    ): ByteArray {
+        require(compressed.size >= 5) {
+            "Data LZMA terlalu pendek untuk header properties."
+        }
+
+        require(uncompressedSize <= Int.MAX_VALUE) {
+            "Ukuran hasil LZMA terlalu besar: $uncompressedSize"
+        }
+
+        val properties = compressed[0]
+
+        val dictionarySize =
+            (compressed[1].toLong() and 0xffL) or
+            ((compressed[2].toLong() and 0xffL) shl 8) or
+            ((compressed[3].toLong() and 0xffL) shl 16) or
+            ((compressed[4].toLong() and 0xffL) shl 24)
+
+        require(dictionarySize <= Int.MAX_VALUE) {
+            "Dictionary LZMA terlalu besar: $dictionarySize"
+        }
+
+        val rawLzma = ByteArrayInputStream(
+            compressed,
+            5,
+            compressed.size - 5
+        )
+
+        val output = ByteArray(
+            uncompressedSize.toInt()
+        )
+
+        LZMAInputStream(
+            rawLzma,
+            uncompressedSize,
+            properties,
+            dictionarySize.toInt()
+        ).use { lzma ->
+            var offset = 0
+
+            while (offset < output.size) {
+                val count = lzma.read(
+                    output,
+                    offset,
+                    output.size - offset
+                )
+
+                if (count < 0) {
+                    break
+                }
+
+                if (count == 0) {
+                    continue
+                }
+
+                offset += count
+            }
+
+            require(offset == output.size) {
+                "Ukuran hasil LZMA tidak cocok: " +
+                    "$offset != ${output.size}"
+            }
+        }
+
+        return output
     }
 }
