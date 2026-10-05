@@ -239,24 +239,42 @@ class MainActivity : Activity() {
 
         if (requestCode == REQUEST_UNITY_BUNDLE) {
             try {
-                val header = contentResolver.openInputStream(uri)?.use {
-                    UnityBundleHeaderReader.read(it)
+                val result = contentResolver.openInputStream(uri)?.use { stream ->
+                    val header = UnityBundleHeaderReader.read(stream)
+                    val metadata = UnityBundleMetadataReader.read(stream, header)
+                    header to metadata
                 } ?: throw IllegalArgumentException(
                     "File Unity Bundle tidak dapat dibuka."
                 )
 
+                val header = result.first
+                val metadata = result.second
+                val samplePaths = metadata.entries
+                    .take(3)
+                    .joinToString("\n") { it.path }
+
+                val message = buildString {
+                    append("UnityFS valid\n")
+                    append("Unity: ${header.engineVersion}\n")
+                    append("Ukuran: ${header.bundleSize} byte\n")
+                    append("Blok data: ${metadata.blocks.size}\n")
+                    append("File internal: ${metadata.entries.size}")
+
+                    if (samplePaths.isNotBlank()) {
+                        append("\nContoh file:\n")
+                        append(samplePaths)
+                    }
+                }
+
                 Toast.makeText(
                     this,
-                    "UnityFS valid\n" +
-                        "Format: ${header.formatVersion}\n" +
-                        "Unity: ${header.engineVersion}\n" +
-                        "Ukuran: ${header.bundleSize} byte",
+                    message,
                     Toast.LENGTH_LONG
                 ).show()
             } catch (e: Exception) {
                 Toast.makeText(
                     this,
-                    "Gagal membaca Unity Bundle: ${e.message}",
+                    "Gagal membaca metadata Unity Bundle: ${e.message}",
                     Toast.LENGTH_LONG
                 ).show()
             }

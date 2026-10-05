@@ -9,7 +9,10 @@ data class UnityBundleHeader(
     val formatVersion: Int,
     val playerVersion: String,
     val engineVersion: String,
-    val bundleSize: Long
+    val bundleSize: Long,
+    val compressedBlocksInfoSize: Long,
+    val uncompressedBlocksInfoSize: Long,
+    val flags: Long
 )
 
 object UnityBundleHeaderReader {
@@ -18,7 +21,6 @@ object UnityBundleHeaderReader {
         val data = DataInputStream(input)
 
         val signature = readNullTerminatedString(data)
-
         require(signature == "UnityFS") {
             "Signature bukan UnityFS: $signature"
         }
@@ -31,9 +33,18 @@ object UnityBundleHeaderReader {
         val playerVersion = readNullTerminatedString(data)
         val engineVersion = readNullTerminatedString(data)
         val bundleSize = data.readLong()
+        val compressedSize = readUnsignedInt(data)
+        val uncompressedSize = readUnsignedInt(data)
+        val flags = readUnsignedInt(data)
 
         require(bundleSize > 0L) {
             "Ukuran bundle tidak valid: $bundleSize"
+        }
+        require(compressedSize in 1L..(32L * 1024 * 1024)) {
+            "Ukuran metadata terkompresi tidak valid: $compressedSize"
+        }
+        require(uncompressedSize in 1L..(32L * 1024 * 1024)) {
+            "Ukuran metadata hasil dekompresi tidak valid: $uncompressedSize"
         }
 
         return UnityBundleHeader(
@@ -41,9 +52,15 @@ object UnityBundleHeaderReader {
             formatVersion = formatVersion,
             playerVersion = playerVersion,
             engineVersion = engineVersion,
-            bundleSize = bundleSize
+            bundleSize = bundleSize,
+            compressedBlocksInfoSize = compressedSize,
+            uncompressedBlocksInfoSize = uncompressedSize,
+            flags = flags
         )
     }
+
+    private fun readUnsignedInt(input: DataInputStream): Long =
+        input.readInt().toLong() and 0xffffffffL
 
     private fun readNullTerminatedString(
         input: DataInputStream
@@ -61,8 +78,6 @@ object UnityBundleHeaderReader {
             bytes.add(value.toByte())
         }
 
-        throw IllegalArgumentException(
-            "String header terlalu panjang"
-        )
+        throw IllegalArgumentException("String header terlalu panjang")
     }
 }

@@ -24,3 +24,7 @@ android {
         jvmTarget = '17'
     }
 }
+
+dependencies {
+    implementation 'org.lz4:lz4-java:1.8.0'
+}
