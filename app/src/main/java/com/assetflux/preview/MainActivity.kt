@@ -19,6 +19,7 @@ class MainActivity : Activity() {
 
     private lateinit var glView: GLSurfaceView
     private lateinit var renderer: CubeRenderer
+    private lateinit var bundleInfoText: TextView
 
     companion object {
         private const val REQUEST_TEXTURE = 1001
@@ -49,36 +50,20 @@ class MainActivity : Activity() {
             setPadding(12, 14, 12, 14)
         }
 
-        addControlRow(
-            root,
-            listOf(
-                "Kubus" to { renderer.setDefaultMesh() },
-                "Piramida" to { renderer.setMesh(MeshFactory.pyramid()) }
-            )
-        )
-
-        val chooseModelButton = Button(this).apply {
-            text = "Pilih Model 3D (OBJ)"
-            isAllCaps = false
-            setOnClickListener {
-                openObjPicker()
-            }
-        }
-
-        val chooseButton = Button(this).apply {
-            text = "Pilih Texture2D (PNG)"
-            isAllCaps = false
-            setOnClickListener {
-                openTexturePicker()
-            }
-        }
-
         val chooseUnityBundleButton = Button(this).apply {
-            text = "Periksa Unity Bundle (.unity3d)"
+            text = "Pilih Unity Bundle (.unity3d)"
             isAllCaps = false
             setOnClickListener {
                 openUnityBundlePicker()
             }
+        }
+
+        bundleInfoText = TextView(this).apply {
+            text = "Unity Bundle belum dipilih"
+            textSize = 14f
+            setTextColor(Color.WHITE)
+            setPadding(16, 12, 16, 12)
+            setGravity(Gravity.START)
         }
 
         root.addView(
@@ -98,53 +83,16 @@ class MainActivity : Activity() {
             )
         )
 
-        addControlRow(
-            root,
-            listOf(
-                "←" to { renderer.adjustTransform(positionXDelta = -0.15f) },
-                "→" to { renderer.adjustTransform(positionXDelta = 0.15f) },
-                "↑" to { renderer.adjustTransform(positionYDelta = 0.15f) },
-                "↓" to { renderer.adjustTransform(positionYDelta = -0.15f) }
-            )
-        )
-
-        addControlRow(
-            root,
-            listOf(
-                "X−" to { renderer.adjustTransform(rotationXDelta = -10f) },
-                "X+" to { renderer.adjustTransform(rotationXDelta = 10f) },
-                "Z−" to { renderer.adjustTransform(rotationZDelta = -10f) },
-                "Z+" to { renderer.adjustTransform(rotationZDelta = 10f) }
-            )
-        )
-
-        addControlRow(
-            root,
-            listOf(
-                "Perkecil" to { renderer.adjustTransform(scaleFactor = 0.9f) },
-                "Perbesar" to { renderer.adjustTransform(scaleFactor = 1.1f) },
-                "Reset" to { renderer.resetTransform() }
-            )
-        )
-
-        root.addView(
-            chooseModelButton,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-        )
-
-        root.addView(
-            chooseButton,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-        )
-
         root.addView(
             chooseUnityBundleButton,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        root.addView(
+            bundleInfoText,
             LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -266,11 +214,7 @@ class MainActivity : Activity() {
                     }
                 }
 
-                Toast.makeText(
-                    this,
-                    message,
-                    Toast.LENGTH_LONG
-                ).show()
+                bundleInfoText.text = message
             } catch (e: Exception) {
                 Toast.makeText(
                     this,
