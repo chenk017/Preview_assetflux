@@ -190,13 +190,21 @@ class MainActivity : Activity() {
                 val result = contentResolver.openInputStream(uri)?.use { stream ->
                     val header = UnityBundleHeaderReader.read(stream)
                     val metadata = UnityBundleMetadataReader.read(stream, header)
-                    header to metadata
+                    val bundleData = UnityBundleDataReader.read(
+                        stream,
+                        header,
+                        metadata
+                    )
+
+                    Triple(header, metadata, bundleData)
                 } ?: throw IllegalArgumentException(
                     "File Unity Bundle tidak dapat dibuka."
                 )
 
                 val header = result.first
                 val metadata = result.second
+                val bundleData = result.third
+
                 val samplePaths = metadata.entries
                     .take(3)
                     .joinToString("\n") { it.path }
@@ -208,8 +216,19 @@ class MainActivity : Activity() {
                     append("Blok data: ${metadata.blocks.size}\n")
                     append("File internal: ${metadata.entries.size}")
 
+                    append("\n\nData block:")
+
+                    bundleData.blocks.forEach { block ->
+                        append("\nBlock #${block.index}")
+                        append("\nKompresi: ${block.compression}")
+                        append("\nCompressed: ${block.compressedSize} byte")
+                        append("\nUncompressed: ${block.uncompressedSize} byte")
+                    }
+
+                    append("\nTotal hasil: ${bundleData.totalUncompressedSize} byte")
+
                     if (samplePaths.isNotBlank()) {
-                        append("\nContoh file:\n")
+                        append("\n\nContoh file:\n")
                         append(samplePaths)
                     }
                 }
