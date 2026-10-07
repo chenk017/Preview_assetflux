@@ -3,7 +3,7 @@ name: Build WaskitaStudio APK
 on:
   push:
     branches: [ main ]
-  workflow_dispatch: # Tombol untuk menjalankan build manual di web GitHub
+  workflow_dispatch: 
 
 jobs:
   buildForAndroid:
