@@ -1,39 +1,441 @@
-name: Build WaskitaStudio APK
+name: Build AssetFlux Native
 
 on:
+  workflow_dispatch:
   push:
-    branches: [ main ]
-  workflow_dispatch: 
+    branches:
+      - main
 
 jobs:
-  buildForAndroid:
-    name: Build for Android 📱
+  build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout repository
+      # 1. Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
-      - name: Cache Library folder
-        uses: actions/cache@v3
+      # 2. Java 17
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
         with:
-          path: Library
-          key: Library-Android-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
-          restore-keys: |
-            Library-Android-
+          distribution: temurin
+          java-version: '17'
 
-      - name: Build Unity Project (GameCI)
-        uses: game-ci/unity-builder@v4
-        env:
-          UNITY_LICENSE: "${{ secrets.UNITY_LICENSE }}"
-          UNITY_EMAIL: "${{ secrets.UNITY_EMAIL }}"
-          UNITY_PASSWORD: "${{ secrets.UNITY_PASSWORD }}"
+      # 3. Gradle
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
         with:
-          targetPlatform: Android
+          gradle-version: '8.9'
 
-      - name: Upload APK Artifact
+      # 4. Install Android SDK
+      - name: Install Android SDK
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+
+          if [ ! -f "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" \
+              -name sdkmanager -type f | head -n 1)"
+          fi
+
+          if [ -z "$SDKMANAGER" ] || [ ! -f "$SDKMANAGER" ]; then
+            echo "ERROR: sdkmanager tidak ditemukan."
+            exit 1
+          fi
+
+          yes | "$SDKMANAGER" --licenses || true
+
+          "$SDKMANAGER" \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
+
+      # 5. Generate project
+      - name: Generate AssetFlux project
+        shell: bash
+        run: |
+          mkdir -p app/src/main/java/com/assetflux/nativeviewer
+          mkdir -p app/src/main/res/values
+
+          cat > settings.gradle <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+
+          rootProject.name = "AssetFlux-Native"
+          include(":app")
+          EOF
+
+          cat > build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application' version '8.7.3' apply false
+              id 'org.jetbrains.kotlin.android' version '2.0.21' apply false
+          }
+          EOF
+
+          cat > gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          kotlin.code.style=official
+          EOF
+
+          cat > app/build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application'
+              id 'org.jetbrains.kotlin.android'
+          }
+
+          android {
+              namespace 'com.assetflux.nativeviewer'
+              compileSdk 35
+
+              defaultConfig {
+                  applicationId 'com.assetflux.nativeviewer'
+                  minSdk 23
+                  targetSdk 35
+                  versionCode 2
+                  versionName "0.2.0"
+              }
+
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+
+              kotlinOptions {
+                  jvmTarget = '17'
+              }
+          }
+          EOF
+
+          cat > app/src/main/res/values/styles.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="AppTheme"
+                  parent="android:style/Theme.Material.Light.NoActionBar">
+                  <item name="android:windowLightStatusBar">true</item>
+                  <item name="android:colorAccent">#6750A4</item>
+              </style>
+          </resources>
+          EOF
+
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+              <application
+                  android:theme="@style/AppTheme"
+                  android:label="AssetFlux Native"
+                  android:allowBackup="false"
+                  android:supportsRtl="true">
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          cat > app/src/main/java/com/assetflux/nativeviewer/MainActivity.kt <<'EOF'
+          package com.assetflux.nativeviewer
+
+          import android.app.Activity
+          import android.content.Intent
+          import android.graphics.BitmapFactory
+          import android.net.Uri
+          import android.opengl.GLES20
+          import android.opengl.GLSurfaceView
+          import android.opengl.Matrix
+          import android.os.Bundle
+          import android.view.MotionEvent
+          import android.view.View
+          import android.widget.Button
+          import android.widget.LinearLayout
+          import android.widget.TextView
+          import java.nio.ByteBuffer
+          import java.nio.ByteOrder
+          import java.nio.FloatBuffer
+          import javax.microedition.khronos.egl.EGLConfig
+          import javax.microedition.khronos.opengles.GL10
+          import kotlin.math.max
+          import kotlin.math.min
+
+          class MainActivity : Activity() {
+              private lateinit var status: TextView
+              private lateinit var renderer: ObjRenderer
+              private lateinit var glView: GLSurfaceView
+              private val PICK_OBJ = 101
+              private val PICK_PNG = 102
+              private var dragX = 0f
+              private var dragY = 0f
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  renderer = ObjRenderer()
+                  glView = GLSurfaceView(this).apply {
+                      setEGLContextClientVersion(2)
+                      setRenderer(renderer)
+                      renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
+                      setOnTouchListener { _, event ->
+                          when (event.action) {
+                              MotionEvent.ACTION_DOWN -> { dragX = event.x; dragY = event.y; true }
+                              MotionEvent.ACTION_MOVE -> {
+                                  val dx = event.x - dragX
+                                  val dy = event.y - dragY
+                                  renderer.rotateBy(dx * 0.6f, dy * 0.6f)
+                                  dragX = event.x; dragY = event.y
+                                  true
+                              }
+                              else -> true
+                          }
+                      }
+                  }
+                  status = TextView(this).apply {
+                      text = "Pilih file OBJ, lalu pilih PNG teksturnya.\nSeret layar untuk memutar model."
+                      textSize = 14f
+                      setPadding(12, 8, 12, 8)
+                  }
+                  val chooseObj = Button(this).apply {
+                      text = "Pilih Mesh .obj"
+                      setOnClickListener { pickFile(PICK_OBJ, "*/*") }
+                  }
+                  val choosePng = Button(this).apply {
+                      text = "Pilih tekstur .png"
+                      setOnClickListener { pickFile(PICK_PNG, "image/png") }
+                  }
+                  val reset = Button(this).apply {
+                      text = "Reset rotasi"
+                      setOnClickListener { renderer.resetRotation() }
+                  }
+                  val buttons = LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      addView(chooseObj, LinearLayout.LayoutParams(0, -2, 1f))
+                      addView(choosePng, LinearLayout.LayoutParams(0, -2, 1f))
+                      addView(reset, LinearLayout.LayoutParams(0, -2, 1f))
+                  }
+                  val root = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      addView(buttons)
+                      addView(status)
+                      addView(glView, LinearLayout.LayoutParams(-1, 0, 1f))
+                  }
+                  setContentView(root)
+              }
+
+              private fun pickFile(request: Int, mime: String) {
+                  val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                      addCategory(Intent.CATEGORY_OPENABLE)
+                      type = mime
+                  }
+                  startActivityForResult(intent, request)
+              }
+
+              @Deprecated("Document picker callback")
+              override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+                  super.onActivityResult(requestCode, resultCode, data)
+                  if (resultCode != RESULT_OK) return
+                  val uri = data?.data ?: return
+                  try {
+                      when (requestCode) {
+                          PICK_OBJ -> {
+                              val text = contentResolver.openInputStream(uri)!!.bufferedReader().use { it.readText() }
+                              val mesh = ObjParser.parse(text)
+                              renderer.setMesh(mesh.positions, mesh.uvs)
+                              status.text = "Mesh dimuat: ${mesh.positions.size / 3} vertex hasil triangulasi. Pilih PNG jika tersedia."
+                              glView.requestRender()
+                          }
+                          PICK_PNG -> {
+                              val bitmap = contentResolver.openInputStream(uri)!!.use { BitmapFactory.decodeStream(it) }
+                                  ?: error("PNG tidak dapat dibaca")
+                              renderer.setTexture(bitmap)
+                              status.text = "Tekstur dimuat: ${bitmap.width} × ${bitmap.height}. Seret layar untuk memutar model."
+                              glView.requestRender()
+                          }
+                      }
+                  } catch (e: Exception) {
+                      status.text = "Gagal memuat file: ${e.message ?: e.javaClass.simpleName}"
+                  }
+              }
+          }
+
+          private data class ObjMesh(val positions: FloatArray, val uvs: FloatArray)
+
+          private object ObjParser {
+              fun parse(text: String): ObjMesh {
+                  val vertices = mutableListOf<FloatArray>()
+                  val tex = mutableListOf<FloatArray>()
+                  val outV = mutableListOf<Float>()
+                  val outT = mutableListOf<Float>()
+                  fun resolve(i: Int, size: Int): Int = if (i < 0) size + i else i - 1
+                  for (raw in text.lineSequence()) {
+                      val line = raw.trim()
+                      if (line.isEmpty() || line.startsWith("#")) continue
+                      val parts = line.split(Regex("\\s+"))
+                      when (parts[0]) {
+                          "v" -> if (parts.size >= 4) vertices.add(floatArrayOf(parts[1].toFloat(), parts[2].toFloat(), parts[3].toFloat()))
+                          "vt" -> if (parts.size >= 3) tex.add(floatArrayOf(parts[1].toFloat(), parts[2].toFloat()))
+                          "f" -> if (parts.size >= 4) {
+                              val refs = parts.drop(1).map { token ->
+                                  val c = token.split("/")
+                                  val vi = resolve(c[0].toInt(), vertices.size)
+                                  val ti = if (c.size > 1 && c[1].isNotEmpty()) resolve(c[1].toInt(), tex.size) else -1
+                                  require(vi in vertices.indices) { "Indeks vertex OBJ di luar rentang" }
+                                  require(ti == -1 || ti in tex.indices) { "Indeks UV OBJ di luar rentang" }
+                                  Pair(vi, ti)
+                              }
+                              for (i in 1 until refs.size - 1) {
+                                  for (r in listOf(refs[0], refs[i], refs[i + 1])) {
+                                      val v = vertices[r.first]
+                                      outV.add(v[0]); outV.add(v[1]); outV.add(v[2])
+                                      val t = if (r.second >= 0) tex[r.second] else floatArrayOf(0f, 0f)
+                                      outT.add(t[0]); outT.add(1f - t[1])
+                                  }
+                              }
+                          }
+                      }
+                  }
+                  require(outV.isNotEmpty()) { "OBJ tidak memiliki face/segitiga yang dapat dirender" }
+                  val minV = FloatArray(3) { Float.POSITIVE_INFINITY }
+                  val maxV = FloatArray(3) { Float.NEGATIVE_INFINITY }
+                  for (i in outV.indices step 3) for (a in 0..2) {
+                      minV[a] = min(minV[a], outV[i + a]); maxV[a] = max(maxV[a], outV[i + a])
+                  }
+                  val center = FloatArray(3) { (minV[it] + maxV[it]) * 0.5f }
+                  val extent = max(maxV[0] - minV[0], max(maxV[1] - minV[1], maxV[2] - minV[2])).coerceAtLeast(0.0001f)
+                  for (i in outV.indices step 3) for (a in 0..2) outV[i + a] = (outV[i + a] - center[a]) * (2f / extent)
+                  return ObjMesh(outV.toFloatArray(), outT.toFloatArray())
+              }
+          }
+
+          private class ObjRenderer : GLSurfaceView.Renderer {
+              @Volatile private var positions = FloatArray(0)
+              @Volatile private var uvs = FloatArray(0)
+              @Volatile private var bitmapBytes: ByteArray? = null
+              @Volatile private var bitmapWidth = 0
+              @Volatile private var bitmapHeight = 0
+              @Volatile private var rotX = -15f
+              @Volatile private var rotY = 25f
+              private var vertexBuffer: FloatBuffer? = null
+              private var uvBuffer: FloatBuffer? = null
+              private var program = 0
+              private var textureId = 0
+              private var textureReady = false
+              private var width = 1
+              private var height = 1
+              private val projection = FloatArray(16)
+              private val view = FloatArray(16)
+              private val model = FloatArray(16)
+              private val mv = FloatArray(16)
+              private val mvp = FloatArray(16)
+
+              fun setMesh(p: FloatArray, t: FloatArray) { positions = p; uvs = t; vertexBuffer = null; uvBuffer = null }
+              fun setTexture(bitmap: android.graphics.Bitmap) {
+                  val stream = java.io.ByteArrayOutputStream()
+                  bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, stream)
+                  bitmapBytes = stream.toByteArray(); bitmapWidth = bitmap.width; bitmapHeight = bitmap.height; textureReady = false
+                  bitmap.recycle()
+              }
+              fun rotateBy(x: Float, y: Float) { rotY += x; rotX = (rotX + y).coerceIn(-89f, 89f) }
+              fun resetRotation() { rotX = -15f; rotY = 25f }
+
+              override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
+                  GLES20.glClearColor(0.08f, 0.09f, 0.12f, 1f)
+                  GLES20.glEnable(GLES20.GL_DEPTH_TEST)
+                  val vs = "attribute vec3 aPos; attribute vec2 aUV; uniform mat4 uMVP; varying vec2 vUV; void main(){ gl_Position=uMVP*vec4(aPos,1.0); vUV=aUV; }"
+                  val fs = "precision mediump float; uniform sampler2D uTex; uniform int uHasTex; varying vec2 vUV; void main(){ gl_FragColor = (uHasTex==1) ? texture2D(uTex,vUV) : vec4(0.78,0.82,0.9,1.0); }"
+                  program = link(compile(GLES20.GL_VERTEX_SHADER, vs), compile(GLES20.GL_FRAGMENT_SHADER, fs))
+                  uploadTextureIfNeeded()
+              }
+              override fun onSurfaceChanged(gl: GL10?, w: Int, h: Int) {
+                  width = w.coerceAtLeast(1); height = h.coerceAtLeast(1); GLES20.glViewport(0, 0, width, height)
+                  Matrix.perspectiveM(projection, 0, 45f, width.toFloat() / height, 0.1f, 100f)
+              }
+              override fun onDrawFrame(gl: GL10?) {
+                  GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT or GLES20.GL_DEPTH_BUFFER_BIT)
+                  val p = positions
+                  if (p.isEmpty()) return
+                  if (vertexBuffer == null || vertexBuffer!!.capacity() != p.size) vertexBuffer = direct(p)
+                  val t = uvs
+                  if (uvBuffer == null || uvBuffer!!.capacity() != t.size) uvBuffer = direct(t)
+                  uploadTextureIfNeeded()
+                  Matrix.setLookAtM(view, 0, 0f, 0f, 4.5f, 0f, 0f, 0f, 0f, 1f, 0f)
+                  Matrix.setIdentityM(model, 0)
+                  Matrix.rotateM(model, 0, rotY, 0f, 1f, 0f)
+                  Matrix.rotateM(model, 0, rotX, 1f, 0f, 0f)
+                  Matrix.multiplyMM(mv, 0, view, 0, model, 0)
+                  Matrix.multiplyMM(mvp, 0, projection, 0, mv, 0)
+                  GLES20.glUseProgram(program)
+                  val posLoc = GLES20.glGetAttribLocation(program, "aPos")
+                  val uvLoc = GLES20.glGetAttribLocation(program, "aUV")
+                  val mvpLoc = GLES20.glGetUniformLocation(program, "uMVP")
+                  GLES20.glUniformMatrix4fv(mvpLoc, 1, false, mvp, 0)
+                  GLES20.glEnableVertexAttribArray(posLoc)
+                  GLES20.glVertexAttribPointer(posLoc, 3, GLES20.GL_FLOAT, false, 0, vertexBuffer)
+                  GLES20.glEnableVertexAttribArray(uvLoc)
+                  GLES20.glVertexAttribPointer(uvLoc, 2, GLES20.GL_FLOAT, false, 0, uvBuffer)
+                  GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+                  GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textureId)
+                  GLES20.glUniform1i(GLES20.glGetUniformLocation(program, "uTex"), 0)
+                  GLES20.glUniform1i(GLES20.glGetUniformLocation(program, "uHasTex"), if (textureReady) 1 else 0)
+                  GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, p.size / 3)
+                  GLES20.glDisableVertexAttribArray(posLoc); GLES20.glDisableVertexAttribArray(uvLoc)
+              }
+              private fun uploadTextureIfNeeded() {
+                  val bytes = bitmapBytes ?: return
+                  if (textureReady) return
+                  val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return
+                  if (textureId == 0) { val ids = IntArray(1); GLES20.glGenTextures(1, ids, 0); textureId = ids[0] }
+                  GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textureId)
+                  GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
+                  GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
+                  GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_REPEAT)
+                  GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_REPEAT)
+                  android.opengl.GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bmp, 0)
+                  bmp.recycle(); textureReady = true
+              }
+              private fun direct(a: FloatArray): FloatBuffer = ByteBuffer.allocateDirect(a.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply { put(a); position(0) }
+              private fun compile(type: Int, src: String): Int { val s = GLES20.glCreateShader(type); GLES20.glShaderSource(s, src); GLES20.glCompileShader(s); val ok = IntArray(1); GLES20.glGetShaderiv(s, GLES20.GL_COMPILE_STATUS, ok, 0); check(ok[0] != 0) { GLES20.glGetShaderInfoLog(s) }; return s }
+              private fun link(v: Int, f: Int): Int { val p = GLES20.glCreateProgram(); GLES20.glAttachShader(p, v); GLES20.glAttachShader(p, f); GLES20.glLinkProgram(p); val ok = IntArray(1); GLES20.glGetProgramiv(p, GLES20.GL_LINK_STATUS, ok, 0); check(ok[0] != 0) { GLES20.glGetProgramInfoLog(p) }; return p }
+          }
+          EOF
+
+      # 6. Generate Gradle Wrapper
+      - name: Generate Gradle Wrapper
+        run: gradle wrapper --gradle-version 8.9
+
+      # 7. Build APK
+      - name: Build APK
+        run: ./gradlew assembleDebug --stacktrace
+
+      # 8. Verify APK
+      - name: Verify APK
+        run: |
+          test -f app/build/outputs/apk/debug/app-debug.apk
+          ls -lh app/build/outputs/apk/debug/app-debug.apk
+
+      # 9. Upload APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: WaskitaStudio-APK
-          path: build/Android/*.apk
+          name: AssetFlux-Native-v0.2
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
